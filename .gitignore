@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+# notebook checkpoints
+.ipynb_checkpoints/
+.nb.html
+# compilation
+__pycache__/
+*.pyc
+*.c
+# visual studio
+.vscode/
