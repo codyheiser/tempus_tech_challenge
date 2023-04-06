@@ -1,4 +1,7 @@
+import requests, sys
 import vcf
+
+import pandas as pd
 
 
 def split_vals(d, key, list_delim=";"):
@@ -19,12 +22,14 @@ def split_vals(d, key, list_delim=";"):
     d : `dict`
         Dictionary with split values
     """
-    assert list_delim in d[key], "Key {} does not contain delimiter {}".format(key, list_delim)
+    assert list_delim in d[key], "Key {} does not contain delimiter {}".format(
+        key, list_delim
+    )
     vals = d[key].split(list_delim)  # list of split values
     d[key] = vals[0]  # original key gets first value
     for i, val in enumerate(vals[1:]):
         # add key1, key2, etc. and corresponding values
-        d["{}{}".format(val, i+1)] = val
+        d["{}{}".format(key, i + 1)] = val
 
 
 def unpack_dict(d, list_delim=";", verbose=False, indent=""):
@@ -40,6 +45,8 @@ def unpack_dict(d, list_delim=";", verbose=False, indent=""):
         String to delimit list values in `d` with
     verbose : `bool`, optional (default=`False`)
         If `True`, print information when values are unpacked
+    indent : `str`, optional (default="")
+        For pretty traceback. Ignored if `verbose==False`.
 
     Returns
     -------
@@ -55,21 +62,38 @@ def unpack_dict(d, list_delim=";", verbose=False, indent=""):
                 d_unpacked[key] = [str(elem) for elem in d_unpacked[key]]
                 d_unpacked[key] = list_delim.join(d_unpacked[key])
                 if verbose:
-                    print("{}Joining key {} using delimiter {}".format(indent, key, list_delim))
+                    print(
+                        "{}Joining key {} using delimiter {}".format(
+                            indent, key, list_delim
+                        )
+                    )
             elif len(d_unpacked[key]) == 1:
                 # if value is list with one element, unpack
                 d_unpacked[key] = d_unpacked[key][0]
                 if verbose:
-                    print("{}Unpacked 1 value from key {}: {}".format(indent, key, d_unpacked[key]))
+                    print(
+                        "{}Unpacked 1 value from key {}: {}".format(
+                            indent, key, d_unpacked[key]
+                        )
+                    )
             else:
                 # if empty list (for some reason), remove the key
                 del d_unpacked[key]
         elif isinstance(d[key], dict):
             # if key is another dict, do full unpacking
             if verbose:
-                print("{}Unpacking key {} as dictionary with {} keys".format(indent, key, len(d_unpacked[key])))
+                print(
+                    "{}Unpacking key {} as dictionary with {} keys".format(
+                        indent, key, len(d_unpacked[key])
+                    )
+                )
             # generate new keys from dict
-            unpacked_key = unpack_dict(d_unpacked[key], list_delim=list_delim, verbose=verbose, indent="{}\t".format(indent))
+            unpacked_key = unpack_dict(
+                d_unpacked[key],
+                list_delim=list_delim,
+                verbose=verbose,
+                indent="{}\t".format(indent),
+            )
             # delete original key-value pair
             del d_unpacked[key]
             # merge the two dicts
@@ -101,7 +125,9 @@ def extract_call(call_obj, format_str="GT:GL:GOF:GQ:NR:NV", format_delim=":"):
     call_dict : `dict`
         Dictionary with unpacked values from `call_obj`
     """
-    assert isinstance(call_obj, vcf.model._Call), "call_obj must be a vcf.model._Call object"
+    assert isinstance(
+        call_obj, vcf.model._Call
+    ), "call_obj must be a vcf.model._Call object"
     call_dict = {}  # initialize empty dictionary
     keys = format_str.split(format_delim)  # list of expected keys in call_obj
     for key in keys:
@@ -109,3 +135,201 @@ def extract_call(call_obj, format_str="GT:GL:GOF:GQ:NR:NV", format_delim=":"):
 
     return call_dict
 
+
+def extract_alt(d, alt_key="ALT"):
+    """
+    Given a dictionary containing `vcf.model._Substitution` object, unpack
+    values into dictionary
+
+    Parameters
+    ----------
+    d : `dict`
+        Dictionary with "ALT" key to unpack
+    alt_key : `str`, optional (default="ALT")
+        key within `d` containing PyVCF `model._Substitution` object
+
+    Returns
+    -------
+    d_unpacked : `dict`
+        Dictionary with unpacked values
+    """
+    d_unpacked = d.copy()
+
+    if isinstance(d[alt_key], vcf.model._Substitution):
+        # get variant type from alt_key
+        d_unpacked["{}_type".format(alt_key)] = d[alt_key].type
+        # get variant sequence as string and replace alt_key
+        d_unpacked[alt_key] = d[alt_key].sequence
+    elif isinstance(d[alt_key], list):
+        # unpack list of ALTs
+        d_unpacked["{}_type".format(alt_key)] = ";".join([x.type for x in d[alt_key]])
+        d_unpacked[alt_key] = ";".join([x.sequence for x in d[alt_key]])
+    else:
+        print("d[alt_key] is not a list or vcf.model._Substitution object; skipping.")
+
+    return d_unpacked
+
+
+def vep_region_post(
+    record,
+    server="https://grch37.rest.ensembl.org",
+    ext="/vep/homo_sapiens/region",
+    **kwargs,
+):
+    """
+    Given a `vcf.model._Record` object, send POST request to Ensembl
+    vep/:species/region
+
+    Parameters
+    ----------
+    record : `vcf.model._Record`
+        PyVCF `model._Record` object to send to Ensembl API
+    server : `str`, optional (default="https://grch37.rest.ensembl.org")
+        URL to Ensembl server
+    ext : `str`, optional (default="/vep/homo_sapiens/region")
+        URL extension for region annotation endpoint
+    **kwargs
+        Keyword arguments for VEP endpoint
+
+    Returns
+    -------
+    vep_dict : `dict`
+        Dictionary with returned values from Ensembl API call
+    """
+    assert isinstance(
+        record, vcf.model._Record
+    ), "record must be a vcf.model._Record object"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    r = requests.post(
+        server + ext,
+        headers=headers,
+        data='{{ "variants" : ["{} {} {} {} {} . . ."], {} }}'.format(
+            record.CHROM,
+            record.POS,
+            record.ID if record.ID is not None else ".",
+            record.REF,
+            record.ALT[0].sequence,
+            str(kwargs).replace("{", "").replace("}", "").replace("'", '"'),
+        ),
+    )
+
+    if not r.ok:
+        r.raise_for_status()
+        sys.exit()
+
+    vep_dict = r.json()
+    assert len(vep_dict) == 1, "More than one VEP result returned!"
+    return vep_dict[0]
+
+
+def overlap_get(record, server="https://grch37.rest.ensembl.org"):
+    """
+    Given a `vcf.model._Record` object, send POST request to Ensembl
+    vep/:species/region
+
+    Parameters
+    ----------
+    record : `vcf.model._Record`
+        PyVCF `model._Record` object to send to Ensembl API
+    server : `str`, optional (default="https://grch37.rest.ensembl.org")
+        URL to Ensembl server
+
+    Returns
+    -------
+    overlap_dict : `dict`
+        Dictionary with returned values from Ensembl API call
+    """
+    assert isinstance(
+        record, vcf.model._Record
+    ), "record must be a vcf.model._Record object"
+    ext = "/overlap/region/homo_sapiens/{}:{}-{}?feature=gene".format(
+        record.CHROM,
+        record.start,
+        record.end,
+    )
+    headers = {"Content-Type": "application/json"}
+    r = requests.get(server + ext, headers=headers)
+
+    if not r.ok:
+        r.raise_for_status()
+        sys.exit()
+
+    overlap_dict = r.json()
+    return overlap_dict
+
+
+def process_record(record, index=1):
+    """
+    Given a `vcf.model._Record` object, annotate it and return as a dataframe
+
+    Parameters
+    ----------
+    record : `vcf.model._Record`
+        PyVCF `model._Record` object to annotate
+    index : `int`, optional (default=1)
+        Index of resulting `pd.DataFrame`
+
+    Returns
+    -------
+    record_unpacked : `pd.DataFrame`
+        Annotated dataframe row corresponding to `record`
+    """
+    # unpack record into dictionary of depth 1
+    record_unpacked = unpack_dict(record.__dict__)
+    # unpack model._Call object
+    call_dict = unpack_dict(
+        extract_call(record_unpacked["samples"], format_str=record_unpacked["FORMAT"]),
+    )
+    # remove old keys
+    del record_unpacked["samples"]
+    del record_unpacked["FORMAT"]
+    # merge dicts
+    record_unpacked = {**record_unpacked, **call_dict}
+
+    # unpack ALT
+    record_unpacked = extract_alt(record_unpacked, alt_key="ALT")
+
+    # get gene where mutation is
+    overlap_dict = overlap_get(record)
+    try:
+        # first record
+        record_unpacked["gene_id"] = overlap_dict[0]["gene_id"]
+        record_unpacked["gene_symbol"] = overlap_dict[0]["external_name"]
+        record_unpacked["gene_biotype"] = overlap_dict[0]["biotype"]
+        record_unpacked["gene_description"] = overlap_dict[0]["description"]
+        if len(overlap_dict) > 1:
+            for i in range(1, len(overlap_dict)):
+                record_unpacked["gene_id{}".format(i)] = overlap_dict[i]["gene_id"]
+                record_unpacked["gene_symbol{}".format(i)] = overlap_dict[i][
+                    "external_name"
+                ]
+                record_unpacked["gene_biotype{}".format(i)] = overlap_dict[i]["biotype"]
+                record_unpacked["gene_description{}".format(i)] = overlap_dict[i][
+                    "description"
+                ]
+    except:
+        print("No gene overlap found for {}".format(record))
+
+    # call Ensembl VEP endpoint
+    vep_dict = vep_region_post(
+        record,
+        hgvs=1,
+        protein=1,
+        uniprot=1,
+        GO=1,
+        vcf_string=1,
+        domains=1,
+        distance=0,  # don't look for upstream/downstream effects for simplicity
+    )
+    # extract VEP info
+    record_unpacked["most_severe_consequence"] = vep_dict["most_severe_consequence"]
+
+    # get MAF and snp info if available
+    if "colocated_variants" in vep_dict:
+        for d in vep_dict["colocated_variants"]:
+            if "minor_allele" in d:
+                record_unpacked["minor_allele"] = d["minor_allele"]
+                record_unpacked["minor_allele_freq"] = d["minor_allele_freq"]
+                record_unpacked["snp_id"] = d["id"]
+
+    return pd.DataFrame(record_unpacked, index=[index])
