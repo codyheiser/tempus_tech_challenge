@@ -18,7 +18,7 @@ Each variant in [`test_vcf_data.txt`](test_vcf_data.txt) must be annotated with 
 * Utility functions in [`utils.py`](utils.py)
 * I chose to employ the [PyVCF](https://pyvcf.readthedocs.io/en/latest/) package for easy parsing of VCF records
 * Exploratory prototyping and interactive annotation in [`prototype.ipynb`](prototype.ipynb)
-* `cli.py` wraps the functions in a command-line interface:
+* [`cli.py`](cli.py) wraps the functions in a command-line interface:
 
 ```
 usage: cli.py [-h] [-j N_JOBS] [-o [OUTFILE]] file
