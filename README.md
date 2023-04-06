@@ -46,7 +46,7 @@ Result of `python cli.py test_vcf_data.txt -j 5 -o test_annotations.csv`:
  * `"ALT_type"` - type of variation (substitution, insertion, CNV, etc.)
  * `"most_severe_consequence"` - variant effect (missense, silent, intergenic, etc.).
 5. `"minor_allele_freq"` - The minor allele frequency of the variant if available.
- * also `"snp_id"` and `"minor_allele"` for the SNP
 6. Any additional annotations that you feel might be relevant:
+ * `"snp_id"` and `"minor_allele"` for any SNPs (see **5**)
  * `"gene_biotype"` - type of gene the variant is found on
  * `"gene_description"` - description of gene the variant is found on
