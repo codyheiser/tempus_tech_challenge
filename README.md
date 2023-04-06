@@ -34,7 +34,7 @@ optional arguments:
                         Output file for annotated VCF. Default 'test_annotations.csv'.
 ```
 
-### Output (columns in `test_annotations.csv`)
+### Output (columns in [`test_annotations.csv`](test_annotations.csv))
 
 Result of `python cli.py test_vcf_data.txt -j 5 -o test_annotations.csv`:
 
