@@ -136,7 +136,7 @@ def extract_call(call_obj, format_str="GT:GL:GOF:GQ:NR:NV", format_delim=":"):
     return call_dict
 
 
-def extract_alt(d, alt_key="ALT"):
+def extract_alt(d, alt_obj, alt_key="ALT"):
     """
     Given a dictionary containing `vcf.model._Substitution` object, unpack
     values into dictionary
@@ -145,6 +145,9 @@ def extract_alt(d, alt_key="ALT"):
     ----------
     d : `dict`
         Dictionary with "ALT" key to unpack
+    alt_obj : `vcf.model._Substitution` or `list`
+        PyVCF `vcf.model._Substitution` object to extract information from
+        (i.e. `record.ALT`)
     alt_key : `str`, optional (default="ALT")
         key within `d` containing PyVCF `model._Substitution` object
 
@@ -155,17 +158,17 @@ def extract_alt(d, alt_key="ALT"):
     """
     d_unpacked = d.copy()
 
-    if isinstance(d[alt_key], vcf.model._Substitution):
+    if isinstance(alt_obj, vcf.model._Substitution):
         # get variant type from alt_key
-        d_unpacked["{}_type".format(alt_key)] = d[alt_key].type
+        d_unpacked["{}_type".format(alt_key)] = alt_obj.type
         # get variant sequence as string and replace alt_key
-        d_unpacked[alt_key] = d[alt_key].sequence
-    elif isinstance(d[alt_key], list):
+        d_unpacked[alt_key] = alt_obj.sequence
+    elif isinstance(alt_obj, list):
         # unpack list of ALTs
-        d_unpacked["{}_type".format(alt_key)] = ";".join([x.type for x in d[alt_key]])
-        d_unpacked[alt_key] = ";".join([x.sequence for x in d[alt_key]])
+        d_unpacked["{}_type".format(alt_key)] = ";".join([x.type for x in alt_obj])
+        d_unpacked[alt_key] = ";".join([x.sequence for x in alt_obj])
     else:
-        print("d[alt_key] is not a list or vcf.model._Substitution object; skipping.")
+        print("alt_obj is not a list or vcf.model._Substitution object; skipping.")
 
     return d_unpacked
 
@@ -276,6 +279,8 @@ def process_record(record, index=1):
     """
     # unpack record into dictionary of depth 1
     record_unpacked = unpack_dict(record.__dict__)
+    # unpack ALT allele objects
+    record_unpacked = extract_alt(record_unpacked, alt_obj=record.ALT, alt_key="ALT")
     # unpack model._Call object
     call_dict = unpack_dict(
         extract_call(record_unpacked["samples"], format_str=record_unpacked["FORMAT"]),
@@ -285,9 +290,6 @@ def process_record(record, index=1):
     del record_unpacked["FORMAT"]
     # merge dicts
     record_unpacked = {**record_unpacked, **call_dict}
-
-    # unpack ALT
-    record_unpacked = extract_alt(record_unpacked, alt_key="ALT")
 
     # get gene where mutation is
     overlap_dict = overlap_get(record)
@@ -314,11 +316,11 @@ def process_record(record, index=1):
     vep_dict = vep_region_post(
         record,
         hgvs=1,
-        protein=1,
-        uniprot=1,
-        GO=1,
-        vcf_string=1,
-        domains=1,
+        # protein=1,
+        # uniprot=1,
+        # GO=1,
+        # vcf_string=1,
+        # domains=1,
         distance=0,  # don't look for upstream/downstream effects for simplicity
     )
     # extract VEP info
@@ -333,3 +335,44 @@ def process_record(record, index=1):
                 record_unpacked["snp_id"] = d["id"]
 
     return pd.DataFrame(record_unpacked, index=[index])
+
+
+def calc_frequencies(out_df):
+    """
+    Calculate variant and reference allele frequencies (VAF and RAF)
+
+    Parameters
+    ----------
+    out_df : `pd.DataFrame`
+        DataFrame containing annotations and columns `["NR","NV"]`
+
+    Returns
+    -------
+    `out_df` is edited in place, adding "NRef", "VAF" and "RAF" columns
+    """
+    out_df[["NR", "NR1"]] = out_df["NR"].astype(str).str.split(";", expand=True)
+    out_df[["NV", "NV1"]] = out_df["NV"].astype(str).str.split(";", expand=True)
+    out_df["VAF"] = out_df["NV"].astype(int) / out_df["NR"].astype(int)
+    out_df["NRef"] = out_df["NR"].astype(int) - out_df["NV"].astype(int)
+    out_df["RAF"] = out_df["NRef"] / out_df["NR"].astype(int)
+
+    # now in rows with multiple values delimited by ;
+    out_df.loc[~out_df.NR1.isnull(), "VAF1"] = out_df.loc[
+        ~out_df.NR1.isnull(), "NV1"
+    ].astype(int) / out_df.loc[~out_df.NR1.isnull(), "NR1"].astype(int)
+    out_df.loc[~out_df.NR1.isnull(), "NRef1"] = out_df.loc[
+        ~out_df.NR1.isnull(), "NR1"
+    ].astype(int) - out_df.loc[~out_df.NR1.isnull(), "NV1"].astype(int)
+    out_df.loc[~out_df.NR1.isnull(), "RAF1"] = out_df.loc[
+        ~out_df.NR1.isnull(), "NRef1"
+    ].astype(int) / out_df.loc[~out_df.NR1.isnull(), "NR1"].astype(int)
+
+    # recombine columns
+    for col in ["VAF", "NRef", "RAF", "NR", "NV"]:
+        out_df.loc[~out_df.NR1.isnull(), col] = (
+            out_df.loc[~out_df.NR1.isnull(), col].astype(str)
+            + ";"
+            + out_df.loc[~out_df.NR1.isnull(), "{}1".format(col)].astype(str)
+        )
+
+    out_df.drop(columns=["VAF1", "NRef1", "RAF1", "NR1", "NV1"], inplace=True)

@@ -15,6 +15,36 @@ Each variant in [`test_vcf_data.txt`](test_vcf_data.txt) must be annotated with 
 
 ## Solution
 
-* Exploratory prototyping in [`prototype.ipynb`](prototype.ipynb)
 * Utility functions in [`utils.py`](utils.py)
 * I chose to employ the [PyVCF](https://pyvcf.readthedocs.io/en/latest/) package for easy parsing of VCF records
+* Exploratory prototyping and interactive annotation in [`prototype.ipynb`](prototype.ipynb)
+* `cli.py` wraps the functions in a command-line interface:
+
+```
+usage: cli.py [-h] [-j N_JOBS] [-o [OUTFILE]] file
+
+positional arguments:
+  file                  VCF file to annotate
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -j N_JOBS, --n-jobs N_JOBS
+                        Number of jobs for parallel. If 1, run serially.
+  -o [OUTFILE], --outfile [OUTFILE]
+                        Output file for annotated VCF. Default 'test_annotations.csv'.
+```
+
+### Outputs (columns in `test_annotations.csv`)
+
+1. `"NR"` - Depth of sequence coverage at the site of variation.
+2. `"NV"` - Number of reads supporting the variant.
+3. `"VAF"` - Percentage of reads supporting the variant versus `"RAF"` - those supporting reference reads.
+4. Using the [VEP hgvs API](https://rest.ensembl.org/#VEP):
+ * `"gene_id"` & `"gene_symbol"` - the gene of the variant
+ * `"ALT_type"` - type of variation (substitution, insertion, CNV, etc.)
+ * `"most_severe_consequence"` - variant effect (missense, silent, intergenic, etc.).
+5. `"minor_allele_freq"` - The minor allele frequency of the variant if available.
+ * also `"snp_id"` and `"minor_allele"` for the SNP
+6. Any additional annotations that you feel might be relevant:
+ * `"gene_biotype"`
+ * `"gene_description"`

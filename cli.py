@@ -27,23 +27,20 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    vcf_read = vcf.Reader(open(args.file, "r"))
-    if args.n_jobs == 1:
+    vcf_read = vcf.Reader(open(args.file, "r"))  # open file
+    if args.n_jobs == 1:  # serial processing
         out = []
         for i, record in enumerate(vcf_read):
             out.append(process_record(record, i))
-    else:
+    else:  # parallel with joblib
         out = Parallel(n_jobs=args.n_jobs)(
             delayed(process_record)(record, i) for i, record in enumerate(vcf_read)
         )
 
-    out_df = pd.concat(out)
-    # calculate VAF
-    # out_df["VAF"] = out_df["NV"].astype(int) / out_df["NR"].astype(int)
-    # calculate reference reads
-    # out_df["NWT"] = out_df["NR"].astype(int) - out_df["NV"].astype(int)
-    # calculate reference %
-    # out_df["RAF"] = out_df["NWT"].astype(int) / out_df["NR"].astype(int)
-    out_df.to_csv(args.outfile)
+    out_df = pd.concat(out)  # concatenate outputs into master df
+
+    calc_frequencies(out_df)  # calculate allele frequencies
+
+    out_df.to_csv(args.outfile)  # save to outfile
 
     print("\nDone! Total records: {}".format(i))
