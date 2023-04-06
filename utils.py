@@ -350,29 +350,37 @@ def calc_frequencies(out_df):
     -------
     `out_df` is edited in place, adding "NRef", "VAF" and "RAF" columns
     """
-    out_df[["NR", "NR1"]] = out_df["NR"].astype(str).str.split(";", expand=True)
-    out_df[["NV", "NV1"]] = out_df["NV"].astype(str).str.split(";", expand=True)
-    out_df["VAF"] = out_df["NV"].astype(int) / out_df["NR"].astype(int)
-    out_df["NRef"] = out_df["NR"].astype(int) - out_df["NV"].astype(int)
-    out_df["RAF"] = out_df["NRef"] / out_df["NR"].astype(int)
+    # split values if needed
+    if out_df.NR.astype(str).str.contains(";").any():
+        out_df[["NR", "NR1"]] = out_df["NR"].astype(str).str.split(";", expand=True)
+        out_df[["NV", "NV1"]] = out_df["NV"].astype(str).str.split(";", expand=True)
 
-    # now in rows with multiple values delimited by ;
-    out_df.loc[~out_df.NR1.isnull(), "VAF1"] = out_df.loc[
-        ~out_df.NR1.isnull(), "NV1"
-    ].astype(int) / out_df.loc[~out_df.NR1.isnull(), "NR1"].astype(int)
-    out_df.loc[~out_df.NR1.isnull(), "NRef1"] = out_df.loc[
-        ~out_df.NR1.isnull(), "NR1"
-    ].astype(int) - out_df.loc[~out_df.NR1.isnull(), "NV1"].astype(int)
-    out_df.loc[~out_df.NR1.isnull(), "RAF1"] = out_df.loc[
-        ~out_df.NR1.isnull(), "NRef1"
-    ].astype(int) / out_df.loc[~out_df.NR1.isnull(), "NR1"].astype(int)
+        out_df["VAF"] = out_df["NV"].astype(int) / out_df["NR"].astype(int)
+        out_df["NRef"] = out_df["NR"].astype(int) - out_df["NV"].astype(int)
+        out_df["RAF"] = out_df["NRef"] / out_df["NR"].astype(int)
 
-    # recombine columns
-    for col in ["VAF", "NRef", "RAF", "NR", "NV"]:
-        out_df.loc[~out_df.NR1.isnull(), col] = (
-            out_df.loc[~out_df.NR1.isnull(), col].astype(str)
-            + ";"
-            + out_df.loc[~out_df.NR1.isnull(), "{}1".format(col)].astype(str)
-        )
+        out_df.loc[~out_df.NR1.isnull(), "VAF1"] = out_df.loc[
+            ~out_df.NR1.isnull(), "NV1"
+        ].astype(int) / out_df.loc[~out_df.NR1.isnull(), "NR1"].astype(int)
+        out_df.loc[~out_df.NR1.isnull(), "NRef1"] = out_df.loc[
+            ~out_df.NR1.isnull(), "NR1"
+        ].astype(int) - out_df.loc[~out_df.NR1.isnull(), "NV1"].astype(int)
+        out_df.loc[~out_df.NR1.isnull(), "RAF1"] = out_df.loc[
+            ~out_df.NR1.isnull(), "NRef1"
+        ].astype(int) / out_df.loc[~out_df.NR1.isnull(), "NR1"].astype(int)
 
-    out_df.drop(columns=["VAF1", "NRef1", "RAF1", "NR1", "NV1"], inplace=True)
+        # recombine columns
+        for col in ["VAF", "NRef", "RAF", "NR", "NV"]:
+            out_df.loc[~out_df.NR1.isnull(), col] = (
+                out_df.loc[~out_df.NR1.isnull(), col].astype(str)
+                + ";"
+                + out_df.loc[~out_df.NR1.isnull(), "{}1".format(col)].astype(str)
+            )
+
+        out_df.drop(columns=["VAF1", "NRef1", "RAF1", "NR1", "NV1"], inplace=True)
+
+    # if no need to split, easy calculations
+    else:
+        out_df["VAF"] = out_df["NV"].astype(int) / out_df["NR"].astype(int)
+        out_df["NRef"] = out_df["NR"].astype(int) - out_df["NV"].astype(int)
+        out_df["RAF"] = out_df["NRef"] / out_df["NR"].astype(int)

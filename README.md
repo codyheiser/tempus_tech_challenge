@@ -34,7 +34,9 @@ optional arguments:
                         Output file for annotated VCF. Default 'test_annotations.csv'.
 ```
 
-### Outputs (columns in `test_annotations.csv`)
+### Output (columns in `test_annotations.csv`)
+
+Result of `python cli.py test_vcf_data.txt -j 5 -o test_annotations.csv`:
 
 1. `"NR"` - Depth of sequence coverage at the site of variation.
 2. `"NV"` - Number of reads supporting the variant.
@@ -46,5 +48,5 @@ optional arguments:
 5. `"minor_allele_freq"` - The minor allele frequency of the variant if available.
  * also `"snp_id"` and `"minor_allele"` for the SNP
 6. Any additional annotations that you feel might be relevant:
- * `"gene_biotype"`
- * `"gene_description"`
+ * `"gene_biotype"` - type of gene the variant is found on
+ * `"gene_description"` - description of gene the variant is found on
